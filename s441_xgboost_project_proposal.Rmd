@@ -1,0 +1,280 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.14.5
+  kernelspec:
+    display_name: Python 3 (ipykernel)
+    language: python
+    name: python3
+output: pdf_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+```{python}
+# # Need to limit number of cores used
+# import os
+# os.environ['MKL_NUM_THREADS'] = '1'
+```
+
+```{python}
+#Load Libraries
+import pandas as pd
+import sqlite3 as sqlite3
+import numpy as np
+from matplotlib import pyplot as plt
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
+from sklearn.metrics import accuracy_score
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.over_sampling import RandomOverSampler
+
+from xgboost import XGBClassifier
+```
+
+### Data Preparation
+
+```{python}
+# Load the data into a DataFrame
+
+con = sqlite3.connect("data/wildfire.sqlite")
+fires = pd.read_sql_query(
+    "select NWCG_REPORTING_AGENCY,CONT_DATE - DISCOVERY_DATE as CONT_TIME, \
+    LONGITUDE,LATITUDE,OWNER_CODE,SOURCE_SYSTEM_TYPE,DISCOVERY_DATE,\
+    DISCOVERY_DOY,STAT_CAUSE_DESCR,FIRE_SIZE from fires", con)
+con.close()
+```
+
+```{python}
+fires.info()
+```
+
+```{python}
+fires = fires.drop_duplicates()
+fires.shape
+```
+
+```{python}
+fires = fires.dropna()
+fires.shape
+```
+
+```{python}
+fires1 = fires[(fires["STAT_CAUSE_DESCR"] != "Missing/Undefined") & (fires["STAT_CAUSE_DESCR"] != "Miscellaneous")]
+fires1.shape
+```
+
+```{python}
+fires1["STAT_CAUSE_DESCR"].value_counts().plot.bar()
+
+```
+
+```{python}
+xFires=fires1.loc[:,fires1.columns != 'STAT_CAUSE_DESCR']
+yFires=fires1['STAT_CAUSE_DESCR']
+
+#Training and test set split
+xTrain,xTest,yTrain,yTest=train_test_split(xFires,yFires,\
+                           test_size=0.1,random_state =441)
+
+xTrain.shape
+# yTrain.shape
+```
+
+```{python}
+counts = yTrain.value_counts()
+counts
+```
+
+```{python}
+from imblearn.over_sampling import RandomOverSampler
+
+def count_under_10000(colname):
+    if counts[colname] < 10000:
+        return 10000
+    return counts[colname]
+
+#Perform undersampling
+OverSampleRatio = {
+    'Lightning' : count_under_10000('Lightning'), 'Debris Burning' : count_under_10000('Debris Burning'), 'Campfire' : count_under_10000('Campfire'), 
+    'Equipment Use' : count_under_10000('Equipment Use'),    
+    'Arson' : count_under_10000('Arson'), 'Children' : count_under_10000('Children'), 'Railroad' : count_under_10000('Railroad'),
+    'Smoking' : count_under_10000('Smoking'), 'Powerline' : count_under_10000('Powerline'),
+    'Fireworks' : count_under_10000('Fireworks'), 'Structure' : count_under_10000('Structure')
+}
+
+newSampStrat=RandomOverSampler(sampling_strategy=OverSampleRatio,random_state=441) #Goal balance all classes
+xTrain,yTrain=newSampStrat.fit_resample(xTrain,yTrain) #perform the balancing newX and newY are balanced X and y
+yTrain.value_counts().plot.bar()  #print result showing the nunmber of observation in each class
+```
+
+```{python}
+counts = yTrain.value_counts()
+counts
+```
+
+```{python}
+from imblearn.under_sampling import RandomUnderSampler
+
+
+newSampStrat=RandomUnderSampler(sampling_strategy='not minority',random_state=441) #Goal balance all classes
+xTrain,yTrain=newSampStrat.fit_resample(xTrain,yTrain) #perform the balancing newX and newY are balanced X and y
+yTrain.value_counts().plot.bar() 
+```
+
+```{python}
+yTrain.value_counts()
+```
+
+### Feature Engineering
+
+```{python}
+xTrain.info()
+```
+
+```{python}
+xTrain.DISCOVERY_DATE
+```
+
+```{python}
+#list for cols to scale
+cols_to_scale = ['CONT_TIME','LONGITUDE', 'LATITUDE', 'DISCOVERY_DATE', 'DISCOVERY_DOY', "FIRE_SIZE"]
+
+#create and fit scaler
+scaler = StandardScaler()
+scaler.fit(xTrain[cols_to_scale])
+
+#scale selected data
+xTrain[cols_to_scale] = scaler.transform(xTrain[cols_to_scale])
+```
+
+```{python}
+# #create and fit scaler
+# scaler = StandardScaler()
+# scaler.fit(xTest[cols_to_scale])
+
+#scale selected data
+xTest[cols_to_scale] = scaler.transform(xTest[cols_to_scale])
+```
+
+```{python}
+# OHE for categorical variables
+xTrain_model = pd.get_dummies(xTrain, columns = ["NWCG_REPORTING_AGENCY", "OWNER_CODE", "SOURCE_SYSTEM_TYPE"])
+xTrain_model.info()
+```
+
+```{python}
+xTest_model = pd.get_dummies(xTest, columns = ["NWCG_REPORTING_AGENCY", "OWNER_CODE", "SOURCE_SYSTEM_TYPE"])
+# xTest_model.info()
+```
+
+```{python}
+# keeping only same columns as xTrain
+cols_to_keep = [col for col in xTest_model.columns if col in xTrain_model.columns]
+xTest_model = xTest_model[cols_to_keep]
+xTest_model.info()
+```
+
+```{python}
+# Encode classes
+lc = LabelEncoder() 
+
+lc_yTrain = lc.fit_transform(yTrain) 
+lc_yTrain
+
+lc_yTest = lc.transform(yTest) 
+lc_yTest
+
+```
+
+```{python}
+lc.get_params()
+```
+
+### Model Training
+
+```{python}
+params = {
+        #'gamma': [0.3, 1],
+        'max_depth': [40, 100],
+        'n_estimators' : [200, 500],
+#        'learning_rate' : [0.01, 0.1, 0.9],
+        'random_state' : [441],
+        'reg_alpha' : [0.5]
+        }
+
+# params = {
+#         'min_child_weight': [1, 5, 10],
+#         'gamma': [0.5, 1, 1.5, 2, 5],
+#         'subsample': [0.6, 0.8, 1.0],
+#         'colsample_bytree': [0.6, 0.8, 1.0],
+#         'max_depth': [3, 4, 5],
+#         'n_estimators' : [100, 300]
+#         }
+```
+
+```{python}
+estimator = XGBClassifier(objective = "multi:softprob") 
+
+grid_search = GridSearchCV(
+    estimator=estimator,
+    param_grid=params,
+    scoring = 'accuracy',
+    #n_jobs = ,
+    cv = 5,
+    verbose=4,
+    refit = True
+)
+
+grid_search.fit(xTrain_model, lc_yTrain)
+
+# model.fit(xTrain_model, lc_yTrain)
+
+# yPred = model.predict(xTest) 
+
+# yPred = [round(value) for value in yPred]
+
+# accuracy = accuracy_score(lc_yTest, yPred) 
+
+# print("Accuracy: %.2f%%" % (accuracy * 100.0))
+```
+
+```{python}
+grid_search.cv_results_
+```
+
+```{python}
+print("The best training accuracy score is ", grid_search.best_score_ * 100, "%")
+```
+
+```{python}
+print("The best parameter combination is:\n ", grid_search.best_params_)
+```
+
+
+```{python}
+final_model = grid_search.best_estimator_
+```
+
+```{python}
+# Predict accuracy on the final test set
+yPred = final_model.predict(xTest_model) 
+
+yPred = [round(value) for value in yPred]
+
+accuracy = accuracy_score(lc_yTest, yPred) 
+
+print("Test Accuracy: %.2f%%" % (accuracy * 100.0))
+```
+
+```{python}
+plt.barh(xTrain_model.columns, final_model.feature_importances_)
+plt.title('Variable Importance for XGBoost Classifier')
+```
