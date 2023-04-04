@@ -45,7 +45,7 @@ For  XG boosting, a combination of the sklearn and xgboost library will be used.
 
 The calibration of tuning parameters was mainly done using sklearn’s GridSearchCV. Due to computational constraints, the main parameters that were tuned were max_depth (depth of tree) and n_estimators (number of trees in the forest). More parameters such as learning_rate, column subsampling parameters, and regularization terms will be tuned for the final project with the help of Bayesian Optimization (python library HyperOpt). The final model parameters were selected based on the best performing model (with respective hyperparameters). Then the final model was trained on the entire training dataset with the best performing hyper-parameters (from above step) and the final test accuracy was calculated based on the test set (split originally using train_test_split).
 
-For neural networks, the sklearn.preprocessing module was used for data cleaning. For building and fitting the model, tensorflow.keras will be used. To perform model selection, keras.tuner  will be used to tune the number of hidden layers, the number of units in each layer, and the activation function(tanh, sigmoid, etc.). “The Keras Tuner library helps you pick the optimal set of hyperparameters for your TensorFlow program. The process of selecting the right set of hyperparameters for your machine learning (ML) application is called hyperparameter tuning or hypertuning" (Waderkar).  Keras Tuner provides multiple options for tuning algorithms, wherein we utilise the RandomSearch tuner. Since the hyperparameter space is extremely large, RandomSearch picks a specific number of combinations based on the ‘max_trials’ parameter to reduce the number of parameter combinations trained. The optimization algorithm to find the best tuning parameter is  the adam algorithm. The loss function that will be used with  the adam algorithm is the negative-log likelihood.  The best model from all trials will be selected to calibrate the final model.
+For neural networks, the sklearn.preprocessing module was used for data cleaning. For building and fitting the model, tensorflow.keras will be used. To perform model selection, keras.tuner  will be used to tune the number of hidden layers, the number of units in each layer, and the activation function(tanh, sigmoid, etc.). “The Keras Tuner library helps you pick the optimal set of hyperparameters for your TensorFlow program. The process of selecting the right set of hyperparameters for your machine learning (ML) application is called hyperparameter tuning or hypertuning" (Introduction to the Keras Tuner).  Keras Tuner provides multiple options for tuning algorithms, wherein we utilise the RandomSearch tuner. Since the hyperparameter space is extremely large, RandomSearch picks a specific number of combinations based on the ‘max_trials’ parameter to reduce the number of parameter combinations trained. The optimization algorithm to find the best tuning parameter is  the adam algorithm. The loss function that will be used with  the adam algorithm is the negative-log likelihood.  The best model from all trials will be selected to calibrate the final model.
 
 # Preliminary results
 
@@ -761,8 +761,6 @@ print(f'Test score is: {sum(predict_classes==yTest)/len(yTest)}')
 
 # References
 
-Chollet, François, and Others. Keras. 2015, https://keras.io.
-
 Short, Karen C. ‘Spatial Wildfire Occurrence Data for the United States, 1992-2015 [FPA_FOD_20170508]  
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(4th Edition)’. Forest Service Research Data Archive, Forest Service Research Data Archive, 2017,    
@@ -771,9 +769,7 @@ Short, Karen C. ‘Spatial Wildfire Occurrence Data for the United States, 1992-
 
 Note - Link is broken, so please refer to kaggle link for dataset  [https://www.kaggle.com/datasets/rtatman/188-million-us-wildfires](https://www.kaggle.com/datasets/rtatman/188-million-us-wildfires)
 
-Wadekar, Shakti. “Hyperparameter Tuning in Keras: Tensorflow 2: With Keras Tuner: RandomSearch, 
-
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Hyperband...” Medium, The Startup, 15 Jan. 2021, [https://medium.com/swlh/hyperparameter-tuning-in-keras-tensorflow-2-with-keras-tuner-randomsearch-hyperband-3e212647778f#:~:text=RandomSearch%20concept%3A,the%20number%20of%20hyperparameters%20increases]. 
+“Introduction to the Keras Tuner” TensorFlow, https://www.tensorflow.org/tutorials/keras/keras_tuner.  
 
 “Weighted K-NN.” GeeksforGeeks, 7 Apr. 2020, [www.geeksforgeeks.org/weighted-k-nn](www.geeksforgeeks.org/weighted-k-nn) 
 
