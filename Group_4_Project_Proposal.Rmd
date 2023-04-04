@@ -3,13 +3,10 @@ title: "Group_4_Project_Proposal"
 output:
   pdf_document: default
   word_document: default
-date: '2023-04-04'
 ---
 
 ---
 title: "Project_Proposal"
-author: "Zohair Ali, Sung Isaac, Ravichanran Surean, Jialong Wang"
-date: "`r Sys.Date()`"
 output:
   pdf_document: default
   html_document: default
@@ -50,7 +47,8 @@ The calibration of tuning parameters was mainly done using sklearn’s GridSearc
 
 For neural networks, the sklearn.preprocessing module was used for data cleaning. For building and fitting the model, tensorflow.keras will be used. To perform model selection, keras.tuner  will be used to tune the number of hidden layers, the number of units in each layer, and the activation function(tanh, sigmoid, etc.). “The Keras Tuner library helps you pick the optimal set of hyperparameters for your TensorFlow program. The process of selecting the right set of hyperparameters for your machine learning (ML) application is called hyperparameter tuning or hypertuning" (Waderkar).  Keras Tuner provides multiple options for tuning algorithms, wherein we utilise the RandomSearch tuner. Since the hyperparameter space is extremely large, RandomSearch picks a specific number of combinations based on the ‘max_trials’ parameter to reduce the number of parameter combinations trained. The optimization algorithm to find the best tuning parameter is  the adam algorithm. The loss function that will be used with  the adam algorithm is the negative-log likelihood.  The best model from all trials will be selected to calibrate the final model.
 
-Preliminary results
+# Preliminary results
+
 These are the preliminary results for the best performing model of each classifier type
 
 ```{r, echo=FALSE, warning=FALSE}
