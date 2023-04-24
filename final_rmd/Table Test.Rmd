@@ -1,0 +1,22 @@
+---
+title: "kable test"
+output:
+  pdf_document: default
+  html_document: default
+date: '2023-04-03'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+```
+
+
+```{r}
+prelim<-data.frame(row.names = c("Support Vector Machines", "XGBoost", "Neural Network"),
+                  Best_Training_Score_Percent = c(37.8, 58.3, 61.5),
+                  Test_Score_Percent =c(42.2, 52.9, 45),
+                  Calibration_Time_Mins=c(905, 93, 32))
+kable(prelim, caption="Preliminary Results")
+```
+

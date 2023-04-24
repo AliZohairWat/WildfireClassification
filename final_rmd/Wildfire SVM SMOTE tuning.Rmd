@@ -1,0 +1,171 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.14.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+#Load Libraries
+import pandas as pd
+import numpy as np
+import sqlite3 as sqlite3
+import numpy as np
+import pickle
+from sklearn.model_selection import train_test_split
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.over_sampling import RandomOverSampler
+from sklearn.metrics import accuracy_score
+from sklearn import svm
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.multiclass import OneVsRestClassifier
+```
+
+```{python}
+# %%time
+train_df=pd.read_csv('SMOTE_training_data.csv')
+test_df=pd.read_csv('testing_data_v2.csv')
+```
+
+```{python}
+xTrain=train_df.loc[:,train_df.columns != 'STAT_CAUSE_DESCR']
+yTrain=train_df['STAT_CAUSE_DESCR']
+xTrain = xTrain.drop('OWNER_CODE', axis=1)
+xTrain=pd.get_dummies(xTrain, columns=['NWCG_REPORTING_AGENCY', 'SOURCE_SYSTEM_TYPE'])
+xTest=test_df.loc[:,test_df.columns != 'STAT_CAUSE_DESCR']
+xTest = xTest.drop('OWNER_CODE', axis=1)
+xTest=pd.get_dummies(xTest, columns=['NWCG_REPORTING_AGENCY', 'SOURCE_SYSTEM_TYPE'])
+xTest['NWCG_REPORTING_AGENCY_BOR']=0
+xTest=xTest[list(xTrain.columns)]
+yTest=test_df['STAT_CAUSE_DESCR']
+
+xTrain.shape
+# yTrain.shape
+```
+
+```{python}
+counts = yTrain.value_counts()
+counts
+```
+
+```{python}
+#Global variable necessary for function
+counts = yTrain.value_counts()
+
+#Change count accordingly for your model
+def count_over(colname, count=5000):
+    if counts[colname] > count:
+        return count
+    return counts[colname]
+
+#Perform undersampling
+UnderSampleRatio = {
+    'Lightning' : count_over('Lightning'), 'Debris Burning' : count_over('Debris Burning'), 'Campfire' : count_over('Campfire'), 
+    'Equipment Use' : count_over('Equipment Use'),    
+    'Arson' : count_over('Arson'), 'Children' : count_over('Children'), 'Railroad' : count_over('Railroad'),
+    'Smoking' : count_over('Smoking'), 'Powerline' : count_over('Powerline'),
+    'Fireworks' : count_over('Fireworks'), 'Structure' : count_over('Structure')
+}
+
+newSampStrat=RandomUnderSampler(sampling_strategy=UnderSampleRatio,random_state=441) #Goal balance all classes
+xTrain,yTrain=newSampStrat.fit_resample(xTrain,yTrain) #perform the balancing newX and newY are balanced X and y
+```
+
+```{python}
+yTrain.value_counts()
+```
+
+```{python}
+xTrain.shape
+```
+
+```{python}
+# RBF kernel with covariate scaling
+model_rbf = Pipeline(
+    steps=[("scaler", StandardScaler()), 
+           ("model", svm.SVC(kernel='rbf'))]
+)
+
+# tuning parameter grid
+# model__xyz specifies that parameter xyz is a parameter to model
+param_grid = {
+    "model__C": [10, 100, 1000, 10000],
+    "model__gamma": ["scale", "auto"],
+    "model__decision_function_shape": ["ovr", "ovo"]
+}
+
+# crossvalidation folds
+cv = KFold(
+    n_splits=5,  # number of folds
+    shuffle=True # protects against data being ordered, e.g., all successes first
+)
+
+cv_rbf_onevall = GridSearchCV(
+    estimator = model_rbf,
+    param_grid = param_grid,
+    cv = cv
+)
+```
+
+```{python}
+# %%time
+cv_rbf_onevall.fit(X=xTrain, y=yTrain)
+```
+
+```{python}
+cv_rbf_onevall.cv_results_
+```
+
+```{python}
+final_model = cv_rbf_onevall.best_estimator_
+```
+
+```{python}
+yPred = final_model.predict(xTest) 
+```
+
+```{python}
+accuracy = accuracy_score(yTest, yPred)
+print("Test Accuracy: %.2f%%" % (accuracy * 100.0))
+```
+
+```{python}
+print("The best training accuracy score is ", cv_rbf_onevall.best_score_ * 100, "%")
+```
+
+```{python}
+# %%time
+filename='SVM_model_tuning'
+pickle.dump(cv_rbf_onevall, open(filename, 'wb')) #Saving the model
+```
+
+```{python}
+pickle.dump(yPred, open('predictions', 'wb'))
+```
+
+```{python}
+pickle.load(open('predictions', 'rb'))
+```
+
+```{python}
+yPred
+```
+
+```{python}
+cv_rbf_onevall.best_estimator_
+```
+
+```{python}
+
+```

@@ -1,0 +1,157 @@
+---
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.14.5
+  kernelspec:
+    display_name: Python 3
+    language: python
+    name: python3
+---
+
+```{python}
+#Load Libraries
+import pandas as pd
+import sqlite3 as sqlite3
+import numpy as np
+from sklearn.model_selection import train_test_split
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.over_sampling import SMOTENC
+from sklearn.experimental import enable_iterative_imputer 
+from sklearn.impute import IterativeImputer
+import pickle
+```
+
+```{python}
+# %%time
+# Load the data into a DataFrame
+
+con = sqlite3.connect("data/wildfire.sqlite")
+fires = pd.read_sql_query(
+    "select NWCG_REPORTING_AGENCY,CONT_DATE - DISCOVERY_DATE as CONT_DUR, \
+    LONGITUDE,LATITUDE,OWNER_CODE,SOURCE_SYSTEM_TYPE,DISCOVERY_DATE,\
+    DISCOVERY_DOY,STAT_CAUSE_DESCR,FIRE_SIZE from fires", con)
+con.close()
+columns=list(fires.columns)
+```
+
+```{python}
+fires.shape
+```
+
+```{python}
+fires = fires.drop_duplicates()
+fires.shape
+```
+
+```{python}
+fires1 = fires[(fires["STAT_CAUSE_DESCR"] != "Missing/Undefined") & (fires["STAT_CAUSE_DESCR"] != "Miscellaneous")]
+fires1.shape
+```
+
+```{python}
+100*fires1.isnull().sum()/len(fires) 
+```
+
+```{python}
+xFires=fires1.loc[:,fires1.columns != 'STAT_CAUSE_DESCR']
+yFires=fires1['STAT_CAUSE_DESCR']
+
+#Training and test set split
+xTrain,xTest,yTrain,yTest=train_test_split(xFires, yFires,\
+                           test_size=0.1,random_state =441)
+
+xTrainDummies=pd.get_dummies(xTrain, columns=['NWCG_REPORTING_AGENCY', 'SOURCE_SYSTEM_TYPE', 'OWNER_CODE'])
+xTestDummies=pd.get_dummies(xTest, columns=['NWCG_REPORTING_AGENCY', 'SOURCE_SYSTEM_TYPE', 'OWNER_CODE'])
+
+xTrainDummies.shape
+# yTrain.shape
+```
+
+```{python}
+imp_mean = IterativeImputer(random_state=441)
+```
+
+```{python}
+# %%time
+imp_mean.fit(xTrainDummies)
+```
+
+```{python}
+#xTest didn't have these entries for NWCG_REPORTING_AGENCY and OWNER_CODE so I have to manually add their dummy variables
+xTestDummies['NWCG_REPORTING_AGENCY_BOR']=0
+xTestDummies['OWNER_CODE_0.0']=0
+xTestDummies=xTestDummies[list(xTrainDummies.columns)]
+```
+
+```{python}
+# %%time
+xTrain_impute=imp_mean.transform(xTrainDummies)
+xTest_impute=imp_mean.transform(xTestDummies)
+```
+
+```{python}
+xTrain_impute=pd.DataFrame(xTrain_impute, columns=list(xTrainDummies.columns))
+xTest_impute=pd.DataFrame(xTest_impute, columns=list(xTrainDummies.columns))
+```
+
+```{python}
+#Dropping index so xTrain/xTest index is consistent with xTrain_impute/xTest_impute index
+xTrain=xTrain.reset_index(drop=True)
+xTest=xTest.reset_index(drop=True)
+xTrain['CONT_DUR']=xTrain_impute['CONT_DUR']
+xTest['CONT_DUR']=xTest_impute['CONT_DUR']
+yTrain=yTrain.reset_index(drop=True)
+```
+
+```{python}
+yTrain
+```
+
+```{python}
+# %%time
+oversample = SMOTENC(random_state=441, categorical_features=[0,4,5])
+xTrain, yTrain = oversample.fit_resample(xTrain, yTrain)
+
+dfy = pd.DataFrame(yTrain)
+dfy.value_counts().plot.bar()
+```
+
+```{python}
+smote_train_df=xTrain
+smote_train_df['STAT_CAUSE_DESCR']=yTrain
+smote_train_df.head()
+```
+
+```{python}
+test_df=pd.read_csv('SMOTE_training_data.csv')
+```
+
+```{python}
+(test_df['STAT_CAUSE_DESCR']==smote_train_df['STAT_CAUSE_DESCR'])
+```
+
+```{python}
+# %%time
+smote_train_df.to_csv('SMOTE_training_data.csv',index=False)
+```
+
+```{python}
+yTest=yTest.reset_index(drop=True)
+testing_data_df=xTest
+testing_data_df['STAT_CAUSE_DESCR']=yTest
+testing_data_df.head()
+```
+
+```{python}
+# %%time
+testing_data_df.to_csv('testing_data_v2.csv',index=False)
+```
+
+```{python}
+
+```
