@@ -1,0 +1,339 @@
+---
+title: "Logistic Regression and KNN"
+author: "Isaac Sung"
+date: "2023-04-13"
+output: html_document
+---
+
+
+
+```{python}
+#Load Libraries
+import pandas as pd
+import sqlite3 as sqlite3
+import numpy as np
+from sklearn.model_selection import train_test_split
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.over_sampling import RandomOverSampler
+from sklearn.experimental import enable_iterative_imputer 
+from sklearn.impute import IterativeImputer
+from imblearn.over_sampling import SMOTE
+
+```
+
+```{python}
+train_df=pd.read_csv('SMOTE_training_data.csv') #load the training data
+
+```
+
+```{python}
+#obtain training set befor undesampling
+xTrain=train_df.drop(['STAT_CAUSE_DESCR'], axis=1) 
+yTrain=train_df['STAT_CAUSE_DESCR']
+xTrain=pd.get_dummies(xTrain, columns=['NWCG_REPORTING_AGENCY', \
+'SOURCE_SYSTEM_TYPE', 'OWNER_CODE'])
+
+```
+
+```{python}
+
+
+#perform undersampling to get a training set of 50,000 and 10,000 respectively
+
+def count_over_50000(colname):
+    if counts2[colname] > 50000:
+        return 50000
+    return counts2[colname]
+
+def count_over_10000(colname):
+    if counts2[colname] > 10000:
+        return 10000
+    return counts2[colname]
+
+
+UnderSampleRatio = {
+    'Lightning' : count_over_50000('Lightning'), 'Debris Burning' : count_over_50000('Debris Burning'), 'Campfire' : count_over_50000('Campfire'), 
+    'Equipment Use' : count_over_50000('Equipment Use'),    
+    'Arson' : count_over_50000('Arson'), 'Children' : count_over_50000('Children'), 'Railroad' : count_over_50000('Railroad'),
+    'Smoking' : count_over_50000('Smoking'), 'Powerline' : count_over_50000('Powerline'),
+    'Fireworks' : count_over_50000('Fireworks'), 'Structure' : count_over_50000('Structure')
+}
+
+UnderSampleRatio2 = {
+    'Lightning' : count_over_10000('Lightning'), 'Debris Burning' : count_over_10000('Debris Burning'), 'Campfire' : count_over_10000('Campfire'), 
+    'Equipment Use' : count_over_10000('Equipment Use'),    
+    'Arson' : count_over_10000('Arson'), 'Children' : count_over_10000('Children'), 'Railroad' : count_over_10000('Railroad'),
+    'Smoking' : count_over_10000('Smoking'), 'Powerline' : count_over_10000('Powerline'),
+    'Fireworks' : count_over_10000('Fireworks'), 'Structure' : count_over_10000('Structure')
+}
+
+#Undersampling to obtain dataset with 550,000 observations
+smoteUnderSampStrat=RandomUnderSampler(sampling_strategy=\
+  UnderSampleRatio,random_state=441) #Goal balance all classes
+xTrain2,yTrain2=smoteUnderSampStrat.fit_resample(xTrain,\
+  yTrain) #perform the balancing newX and newY are balanced X and y
+
+
+#undersampling to obtain dataset with 110,000 observations
+smoteUnderSampStrat2=RandomUnderSampler(sampling_strategy=\
+  UnderSampleRatio2,random_state=441) #Goal balance all classes
+xTrain3,yTrain3=smoteUnderSampStrat2.fit_resample(xTrain,\
+  yTrain) #perform the balancing newX and newY are balanced X and y
+
+
+```
+
+```{python}
+xTrain2['cause']= yTrain2
+xTrain3['cause']= yTrain3
+```
+
+
+
+```{python}
+
+#smote_df.to_csv('SMOTE_fires_data.csv', index=False)
+xTrain2.to_csv('logitReg.csv',index=False)
+xTrain3.to_csv('logitReg2.csv',index=False)
+
+```
+
+```{R,eval=FALSE}
+#Load libraries
+library(glmnet)
+library(tidyverse)
+library(caret)
+library(kknn)
+library(pROC)
+library(usdm)
+
+#read datasets
+miceTestSet<-read.csv("imputed_test_data.csv")
+callibSet<-read.csv("logitReg2.csv")
+smoteTrainSet<-read.csv("logitReg.csv")
+
+```
+```{R}
+#check for multicolinearity
+callibContSet<-callibSet[,1:6]
+vifVals<-vif(callibContSet) #vif for each continous variable
+```
+
+
+```{R,eval=FALSE}
+#data preprocessing
+
+callibSet$cause<-as.factor(callibSet$cause)
+smoteTrainSet$cause<-as.factor(smoteTrainSet$cause)
+
+#Chosen reference level for catergoriacal variables NWCG_REPORTING_AGENCY=BIA,
+  #SOURCE_SYSTEM_TYPE=FED, OWNER_CODE=0. Remove the reference level variables
+callibSet<-dplyr::select(callibSet,-c(NWCG_REPORTING_AGENCY_BIA,  
+                                      SOURCE_SYSTEM_TYPE_FED,OWNER_CODE_0.0))
+
+
+smoteLogitSet<-dplyr::select(smoteTrainSet,-c(NWCG_REPORTING_AGENCY_BIA,  
+                                      SOURCE_SYSTEM_TYPE_FED,OWNER_CODE_0.0))
+
+
+```
+
+
+```{R,eval=FALSE}
+
+#Determine which observations are in which fold
+set.seed(441)
+mixObs<-sample(1:nrow(callibSet),nrow(callibSet),replace = FALSE) 
+startIdx<-0:4 * nrow(callibSet) /5 + 1 #starting index of each fold
+endIdx<-1:5 * nrow(callibSet) /5  #ending index of each fold
+
+
+foldIdxVec<-1:nrow(callibSet) 
+for(j in 1:5){ 
+  currStart<-startIdx[j]
+  currEnd<-endIdx[j]
+  currVec<-mixObs[currStart:currEnd]
+  foldIdxVec[currVec]<-j
+}
+
+desMat<-as.matrix(model.matrix(cause~.,data=callibSet)[,-1])  #design matrix
+alphaVec<-seq(0,1,by=0.1) #Alpha values we are testing 
+cvVec<-rep(NA,length(alphaVec)) #vector that will store CV error
+bestLambdaVec<-rep(NA,length(alphaVec)) #Vector that will store best lambda 
+counter<-1
+
+```
+
+```{R,eval=FALSE}
+
+timeStart<-Sys.time()
+set.seed(441)
+for(i in alphaVec){
+  currMod<-cv.glmnet(desMat,callibSet$cause,family="multinomial", 
+                      standardize=TRUE,intercept=TRUE,
+                      alpha=i,nfolds=5,foldid=foldIdxVec)
+  bestLambdaVec[counter]<-currMod$lambda.1se #find the best lambda
+  bestlambdaIdx<-which(currMod$lambda == bestLambdaVec[counter])#best lambda idx
+  cvVec[counter]<-as.numeric(currMod$cvm[bestlambdaIdx])#cv error
+  currCvm<-as.numeric(currMod$cvm[bestlambdaIdx])
+  if(counter == 1) {
+    smallestCvm<-currCvm #smallest cv error so far
+    bestModNow<-currMod #best model so far
+    bestAlphaNow<-0
+  } else if( currCvm < smallestCvm){
+    smallestCvm<-currCvm #smallest cv error so far
+    bestModNow<-currMod #best model so far
+    bestAlphaNow<-(counter-1) * 0.1
+  }
+  counter<-counter + 1
+}
+timeEnd<-Sys.time()
+timeEnd-timeStart
+```
+```{R,eval=FALSE}
+bestLambdaSmall<-bestModNow$lambda.1se
+```
+
+```{R,eval=FALSE}
+desMatInt<-as.matrix(model.matrix(cause~.^2,  #add interaction terms
+                                  data=callibSet)[,-1])
+alphaVec<-seq(0,1,by=0.1) #Sequence of alpha values being tested
+cvVecInt<-rep(NA,length(alphaVec)) #Will eventually store the CV error
+bestLambdaVecInt<-rep(NA,length(alphaVec)) #Vector that stroes the best lambda
+counter<-1
+
+```
+
+```{R,eval=FALSE}
+#Find the best tuning parameters
+timeStart<-Sys.time()
+for(i in alphaVec){
+  currModInt<-cv.glmnet(desMatInt,callibSet$cause,family="multinomial", 
+                      standardize=TRUE,intercept=TRUE,
+                      alpha=i,nfolds=5,foldid=foldIdxVec)
+  bestLambdaVecInt[counter]<-currModInt$lambda.1se #find the best lambda
+  bestlambdaIntIdx<-which(currModInt$lambda == bestLambdaVecInt[counter])
+  cvVecInt[counter]<-as.numeric(currModInt$cvm[bestlambdaIntIdx])
+  currCvmInt<-as.numeric(currModInt$cvm[bestlambdaIntIdx])
+  if(counter == 1) {
+    smallestCvmInt<-currCvmInt
+    bestModIntNow<-currModInt
+    bestAlphaIntNow<-0
+  } else if( currCvmInt < smallestCvmInt){
+    smallestCvmInt<-currCvmInt #smallest cv error so far
+    bestModIntNow<-currModInt
+    bestAlphaIntNow<-(counter-1) * 0.1
+  }
+  counter<-counter + 1
+}
+timeEnd<-Sys.time()
+timeEnd-timeStart
+logitIntRunTime<-timeEnd- timeStart
+
+```
+
+
+
+```{R,eval=FALSE}
+#Remove reference level for test set
+miceNoRefSet<-dplyr::select(miceTestSet,-c(NWCG_REPORTING_AGENCY_BIA,
+                             SOURCE_SYSTEM_TYPE_FED,OWNER_CODE_0.0))
+
+#Calculate prediction accuracy for model without interaction terms
+newSet1<-as.matrix(model.matrix(STAT_CAUSE_DESCR~.,data=miceNoRefSet)[,-1])
+predValLogit<-predict(bestModNow,newx =newSet1,type="class")
+predAccLogit<-sum(predValLogit == miceNoRefSet$STAT_CAUSE_DESCR)/
+  nrow(miceNoRefSet)
+
+#calculater prediction accuracy for models with interaction terms
+newSet<-as.matrix(model.matrix(STAT_CAUSE_DESCR~.^2,data=miceNoRefSet)[,-1])
+predValInt<-predict(bestModIntNow,newx =newSet,type="class")
+predAccInt<-sum(predValInt == miceNoRefSet$STAT_CAUSE_DESCR)/
+  nrow(miceNoRefSet)
+
+```
+
+
+
+
+```{R,eval=FALSE}
+#Find the best model using a training set of 550,000
+set.seed(441)
+logitMat<-as.matrix(model.matrix(cause~.,data=smoteLogitSet)[,-1])
+
+logitTrainMod<-cv.glmnet(logitMat, smoteTrainSet$cause,family="multinomial",
+                intercept=TRUE, standardize=TRUE,alpha =bestAlphaNow,nfold=5,
+                nlambda=50)
+
+```
+
+```{R,eval=FALSE}
+finalLambda<-logitTrainMod$lambda.1se #best lamda value 
+```
+
+```{R,eval=FALSE}
+#Preprocessing for test set
+testSetLogit<-dplyr::select(miceTestSet,-c(NWCG_REPORTING_AGENCY_BIA,  
+                                      SOURCE_SYSTEM_TYPE_FED,OWNER_CODE_0.0))
+testMatLogit<-as.matrix(model.matrix(STAT_CAUSE_DESCR~.,
+                                     data=testSetLogit)[,-1])
+
+#Prediction using the set with 550,000 observations
+predVal<-predict(logitTrainMod,newx =testMatLogit,type="class")
+predAcc<-sum(predVal == testSetLogit$STAT_CAUSE_DESCR)/nrow(testSetLogit)
+
+```
+
+
+```{R,eval=FALSE}
+#confusion matrix logistic regression
+confMat<-confusionMatrix(data=as.factor(predVal),
+                reference=as.factor(testSetLogit$STAT_CAUSE_DESCR))
+
+
+#Useful stats
+confStats<-confMat$byClass 
+
+
+```
+
+
+```{R,eval = FALSE}
+#Save results
+save(predAccLogit,predAccInt,logitTrainMod,confStats,vifVals,bestLambdaSmall,
+     bestModNow,bestAlphaNow,predAcc,confMat,finalLambda,file= "logitFinal.rda")
+
+
+```
+
+```{R}
+load("logitFinal.rda")
+vifVals #VIF for each predictor
+```
+
+```{R}
+#On the training set of 110,000 
+predAccLogit #prediction accuracy for multinomial without interaction terms
+predAccInt #prediction accuracy for the model with interaction terms
+```
+
+```{R}
+#best tuning parameters for the multinomial model with 110,000 observations
+bestLambdaSmall #lambda value
+bestAlphaNow #alpha value
+```
+
+```{R}
+#best tuning parameter after multinomial model after 550,000 observations
+finalLambda  #lambda value
+```
+
+```{R}
+predAcc #prediction accuracy
+
+```
+
+```{R}
+#useful Stats precision, recall,  F1,etc...
+confStats
+```
